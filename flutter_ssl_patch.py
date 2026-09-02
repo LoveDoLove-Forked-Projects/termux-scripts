@@ -177,18 +177,19 @@ def find_offset(r2, patterns, is_iA=False, arch=None, platform=None):
     if not platform:
         platform = "android"
 
+    matches = []
+    seen = set()
     if platform in patterns and arch in patterns[platform]:
         for pattern, retval in patterns[platform][arch]:
             search_result = r2.cmd(f"/x {pattern}")
             search_result = search_result.strip().split(" ")[0]
             if search_result:
-                search_fcn = r2.cmd(f"{search_result};afl.").strip().split(" ")[0]
-                print(f"ssl_verify_peer_cert found at: {BLUE}{search_result}{NC}")
-                if not search_fcn:
-                    search_fcn = search_result
-                    r2.cmd(f"af @{search_fcn}")
-                print(f"function at: {YELLOW}{search_fcn}{NC}")
-                return search_fcn, retval
+                fname = "session_verify_cert_chain" if retval else "ssl_verify_peer_cert"
+                print(f"{fname} found at: {BLUE}{search_result}{NC}")
+                if search_result not in seen:
+                    seen.add(search_result)
+                    matches.append((search_result, retval))
+        return matches
     else:
         print(f"{RED}No patterns found for platform '{platform}' and architecture '{arch}'{NC}")
 
@@ -254,11 +255,12 @@ if __name__ == "__main__":
     else:
         result = find_offset(r2, patterns, is_iA, platform=platform)
     if result:
-        offset, retval = result
-        if not args.print:
-            r2.cmd(f"{offset}")
-            r2.cmd(f"wao ret{retval}")
-            print(f"{GREEN}ssl_verify_peer_cert patched successfully!{NC}")
+        for offset, retval in result:
+            if not args.print:
+                r2.cmd(f"{offset}")
+                r2.cmd(f"wao ret{retval}")
+                fname = "session_verify_cert_chain" if retval else "ssl_verify_peer_cert"
+                print(f"{GREEN}{fname} patched successfully!{NC}")
     else:
         print(f"{RED}ssl_verify_peer_cert not found.{NC}")
     r2.quit()
